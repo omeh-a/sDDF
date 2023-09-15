@@ -37,6 +37,17 @@ const int bus = BUS_NUM;
 uintptr_t gpio;
 uintptr_t clk;
 
+// Transport layer
+uintptr_t req_free;
+uintptr_t req_used;
+uintptr_t ret_free;
+uintptr_t ret_used;
+uintptr_t driver_bufs;
+
+ring_handle_t reqRing;
+ring_handle_t retRing;
+i2c_ctx_t i2c_ctx = { 0 };
+
 // Actual interfaces. Note that address here must match the one in i2c.system defined for `i2c` memory region.
 // Hardcoded because the C compiler cannot handle the non-constant symbol `uinptr_t i2c`, which is added by the
 // elf patcher.
@@ -117,6 +128,17 @@ volatile i2c_ifState_t i2c_ifState;
 static inline void setupi2c() {
     printf("driver: initialising i2c master interfaces...\n");
 
+    // Initialise transport
+    // NOTE: this cannot be done statically because the shared memory regions need
+    //       to be ELF patched in after compile time.
+    i2c_ctx.req_free = req_free;
+    i2c_ctx.req_used = req_used;
+    i2c_ctx.ret_free = ret_free;
+    i2c_ctx.ret_used = ret_used;
+    i2c_ctx.driver_bufs = driver_bufs;
+    i2c_ctx.reqRing = reqRing;
+    i2c_ctx.retRing = retRing;
+    i2cTransportInit(&i2c_ctx, 0);
 
     // Note: this is hacky - should do this using a GPIO driver.    
     // Set up pinmux
@@ -472,16 +494,16 @@ static inline void checkBuf() {
         // Otherwise, begin work. Start by extracting the request
 
         size_t sz = 0;
-        req_buf_ptr_t req = popReqBuf(&sz);
+        req_buf_ptr_t req = popReqBuf(&i2c_ctx, &sz);
 
         if (!req) {
             return;   // If request was invalid, run away.
         }
 
-        ret_buf_ptr_t ret = getRetBuf();
+        ret_buf_ptr_t ret = getRetBuf(&i2c_ctx);
         if (!ret) {
             printf("driver: no ret buf!\n");
-            releaseReqBuf(req);
+            releaseReqBuf(&i2c_ctx, req);
             return;
         }
 
@@ -609,8 +631,8 @@ static inline void i2cirq(int timeout) {
     // If request is completed or there was an error, return data to server and notify.
     if (err < 0 || !i2c_ifState.remaining) {
         printf("driver: request completed or error, returning to server\n");
-        pushRetBuf(i2c_ifState.current_ret, i2c_ifState.current_req_len);
-        releaseReqBuf(i2c_ifState.current_req);
+        pushRetBuf(&i2c_ctx, i2c_ifState.current_ret, i2c_ifState.current_req_len);
+        releaseReqBuf(&i2c_ctx, i2c_ifState.current_req);
         i2c_ifState.current_ret = NULL;
         i2c_ifState.current_req = 0x0;
         i2c_ifState.current_req_len = 0;

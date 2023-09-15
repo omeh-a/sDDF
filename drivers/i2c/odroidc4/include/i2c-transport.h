@@ -32,15 +32,16 @@
 #define REQ_BUF_DAT_OFFSET 2    // Number of non-payload bytes. Should match however
                                 // many #defines are listed here.
 
-// Shared memory regions
-extern uintptr_t req_free;
-extern uintptr_t req_used;
-extern uintptr_t ret_free;
-extern uintptr_t ret_used;
-extern uintptr_t driver_bufs;
-
-extern ring_handle_t reqRing;
-extern ring_handle_t retRing;
+// Context struct
+typedef struct {
+    uintptr_t req_free;
+    uintptr_t req_used;
+    uintptr_t ret_free;
+    uintptr_t ret_used;
+    uintptr_t driver_bufs;
+    ring_handle_t reqRing;
+    ring_handle_t retRing;
+} i2c_ctx_t;
 
 
 
@@ -54,7 +55,7 @@ typedef volatile uint8_t *req_buf_ptr_t;
  * Initialise the transport layer. Sets up shared ring buffers
  * and their associated transport buffers.
  */
-void i2cTransportInit(int buffer_init);
+void i2cTransportInit(i2c_ctx_t *context, int buffer_init);
 
 /**
  * Allocate a request buffer to push data into the driver for a specified
@@ -72,12 +73,12 @@ void i2cTransportInit(int buffer_init);
  * @param addr: 7-bit I2C address to be used for the transaction
  * @return Pointer to the buffer allocated for this request
 */
-req_buf_ptr_t allocReqBuf(size_t size, uint8_t *data, uint8_t client, uint8_t addr);
+req_buf_ptr_t allocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_t client, uint8_t addr);
 
 /**
  * Release a request buffer to the free pool.
 */
-int releaseReqBuf(req_buf_ptr_t buf);
+int releaseReqBuf(i2c_ctx_t *context, req_buf_ptr_t buf);
 
 /**
  * Allocate a return buffer to get data back to the server from the driver, given a
@@ -93,13 +94,13 @@ int releaseReqBuf(req_buf_ptr_t buf);
 
  * @return Pointer to the buffer allocated for this request
 */
-ret_buf_ptr_t getRetBuf(void);
+ret_buf_ptr_t getRetBuf(i2c_ctx_t *context);
 
 
 /**
  * Release a return buffer to the free pool.
 */
-int releaseRetBuf(ret_buf_ptr_t buf);
+int releaseRetBuf(i2c_ctx_t *context, ret_buf_ptr_t buf);
 
 /**
  * Push a return buffer back to the server for a specified i2c master interface (bus).
@@ -111,14 +112,14 @@ int releaseRetBuf(ret_buf_ptr_t buf);
  * @param sz: Size of the buffer to be pushed back to the server
  * @return 0 on success
 */
-int pushRetBuf(ret_buf_ptr_t buf, size_t size);
+int pushRetBuf(i2c_ctx_t *context, ret_buf_ptr_t buf, size_t size);
 
 /**
  * Pop a return buffer from the server for a specified i2c master interface (bus).
  * Removes buffer from the used pool but does not put it in the free queue.
  * @return Pointer to buffer containing request from the server.
 */
-req_buf_ptr_t popReqBuf(size_t *size);
+req_buf_ptr_t popReqBuf(i2c_ctx_t *context, size_t *size);
 
 
 /**
@@ -126,7 +127,7 @@ req_buf_ptr_t popReqBuf(size_t *size);
  * Removes buffer from the used pool but does not put it in the free queue.
  * @return Pointer to buffer containing data from the driver.
 */
-ret_buf_ptr_t popRetBuf(size_t *size);
+ret_buf_ptr_t popRetBuf(i2c_ctx_t *context, size_t *size);
 
 int retBufEmpty(void);
 int reqBufEmpty(void);
