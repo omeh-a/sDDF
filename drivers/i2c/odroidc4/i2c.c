@@ -21,21 +21,87 @@
 #ifndef BUS_NUM
 #error "BUS_NUM must be defined!"
 #endif
+#ifndef NUM_CLIENTS
+#error "NUM_CLIENTS must be defined!"
+#endif
+#if NUM_CLIENTS > I2C_SECURITY_LIST_SZ
+#error "NUM_CLIENTS must be less than or equal to I2C_SECURITY_LIST_SZ!"
+#endif
+#ifndef CLIENT_MAP_REQFREES
+#error "CLIENT_MAP_REQFREES must be defined!"
+#endif
+#ifndef CLIENT_MAP_REQUSEDS
+#error "CLIENT_MAP_REQUSEDS must be defined!"
+#endif
+#ifndef CLIENT_MAP_RETFREES
+#error "CLIENT_MAP_RETFREES must be defined!"
+#endif
+#ifndef CLIENT_MAP_RETUSEDS
+#error "CLIENT_MAP_RETUSEDS must be defined!"
+#endif
+
+
+// Client table: maps client IDs to their corresponding transport context
+uint64_t clients[I2C_SECURITY_LIST_SZ];
 
 // Security list: owner of each i2c address on the bus
 i2c_security_list_t security_list[I2C_SECURITY_LIST_SZ];
+
+// ## Transport layer context ##
+// This rat's nest of horrifying macros is used to guarantee that users do not need
+// to touch the driver code to use i2c. Sorry makefile. Memory addresses of all shared
+// regions need to be passed in by the makefile matching the system definition.
+#define EXPAND_AS_INIT_LIST(req_free, req_used, ret_free, ret_used, driver_bufs) \
+    {req_free, req_used, ret_free, ret_used, driver_bufs, {0}, {0}, 0},
+
+#define MAKE_ENTRY(r1, r2, r3, r4, db) EXPAND_AS_INIT_LIST(r1, r2, r3, r4, db)
+
+#define PROCESS_LISTS(R1, R2, R3, R4, DB) MAKE_ENTRY(R1, R2, R3, R4, DB)
+
+#define INIT_STRUCT_ARRAY \
+{ \
+    PROCESS_LISTS(REQ_FREE_LIST, REQ_USED_LIST, RET_FREE_LIST, RET_USED_LIST, DRIVER_BUFS_LIST) \
+}
+
+i2c_ctx_t client_contexts[] = INIT_STRUCT_ARRAY;
+
+// Driver transport layer. This is entirely static and these values are just supplied
+// from the system definition.
+i2c_ctx_t driver_context;
+uintptr_t drv_req_free;
+uintptr_t drv_req_used;
+uintptr_t drv_ret_free;
+uintptr_t drv_ret_used;
+uintptr_t drv_driver_bufs;
 
 /**
  * Main entrypoint for server.
 */
 void init(void) {
     sel4cp_dbg_puts("I2C server init\n");
-    i2cTransportInit(1);
+
+    // Set up server<=>driver transport layer
+    driver_context.req_free = drv_req_free;
+    driver_context.req_used = drv_req_used;
+    driver_context.ret_free = drv_ret_free;
+    driver_context.ret_used = drv_ret_used;
+    driver_context.driver_bufs = drv_driver_bufs;
+    i2cTransportInit(&driver_context, 1);
+
+    // Set up client<=>server transport layers
+    INIT_STRUCT_ARRAY();
+    for (int i = 0; i < NUM_CLIENTS; i++) {
+        i2cTransportInit(&client_contexts[i], 1);
+    }
+
+    i2cTransportInit(&driver_context, 1);
 
     // Clear security list
     for (int j = 0; j < I2C_SECURITY_LIST_SZ; j++) {
         security_list[j] = -1;
     }
+
+    // Initialisation procedure: 
 }
 
 /**

@@ -69,11 +69,7 @@ int pushRetBuf(i2c_ctx_t *context, ret_buf_ptr_t buf, size_t size) {
     if (size > I2C_BUF_SZ || !buf) {
         return 0;
     }
-    int ret = enqueue_used(&context->retRing, (uintptr_t)buf, size);
-    if (ret != 0) {
-        return 0;
-    }
-    return 1;
+    return enqueue_used(&context->retRing, (uintptr_t)buf, size);
 }
 
 uintptr_t popBuf(i2c_ctx_t *context, ring_handle_t *ring, size_t *sz) {
@@ -100,23 +96,9 @@ int reqBufEmpty(i2c_ctx_t *context) {
 }
 
 int releaseReqBuf(i2c_ctx_t *context, req_buf_ptr_t buf) {
-    if (!buf) {
-        return 0;
-    }
-    int ret = enqueue_free(&context->reqRing, (uintptr_t)buf, I2C_BUF_SZ);
-    if (ret != 0) {
-        return 0;
-    }
-    return 1;
+    return enqueue_free(&context->reqRing, (uintptr_t)buf, I2C_BUF_SZ);
 }
 
 int releaseRetBuf(i2c_ctx_t *context, ret_buf_ptr_t buf) {
-    if (!buf) {
-        return 0;
-    }
-    int ret = enqueue_free(&context->retRing, (uintptr_t)buf, I2C_BUF_SZ);
-    if (ret != 0) {
-        return 0;
-    }
-    return 1;
+    return enqueue_free(&context->retRing, (uintptr_t)buf, I2C_BUF_SZ);
 }

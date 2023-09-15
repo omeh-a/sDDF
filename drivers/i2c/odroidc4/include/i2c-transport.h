@@ -41,6 +41,7 @@ typedef struct {
     uintptr_t driver_bufs;
     ring_handle_t reqRing;
     ring_handle_t retRing;
+    int rdy;
 } i2c_ctx_t;
 
 

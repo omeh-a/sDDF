@@ -13,6 +13,161 @@ All interfaces can operate both in controller (formerly master) and target (form
 
 Initially, we effectively ignore the AO domain option for homogeneity (we also will never run this code with EE disabled). This driver is intended to operate the demo system for the [KISS OS](https://github.com/au-ts/kiss) where it will operate the touchscreen and NFC devices.
 
+## Usage
+
+The following subsections describe how to add i2c to your system description and your makefile. You should not need to modify the driver or server code in order to use this! Note that this entire section and the methodology below is a placeholder while we design a static configuration tool.
+
+### System description
+
+#### Client memory regions
+
+To use this i2c driver in your seL4-mk project, you need to know which clients will interact with which i2c interface at build time. **Each interface supports at most 127 clients**. Each client is connected to the server via a set of 4 ring buffers:
+* `req_free`
+* `req_used`
+* `ret_free`
+* `ret_used`
+
+These ring buffers are backed by memory from a buffer region, `bufs`. Every client needs an instance of **all five regions**. These must be defined as follows in your system description for each client:
+
+```json
+<!-- Transfer channels client <=> server -->
+<memory_region name="clientX_req_free" size="0x200_000" page_size="0x200_000"/>
+<memory_region name="clientX_req_used" size="0x200_000" page_size="0x200_000"/>
+<memory_region name="clientX_ret_free" size="0x200_000" page_size="0x200_000"/>
+<memory_region name="clientX_ret_used" size="0x200_000" page_size="0x200_000"/>
+<memory_region name="clientX_bufs" size="0x200_000" page_size="0x200_000"/>
+```
+
+#### Driver/server memory regions
+
+The driver and server use an identical layer to the client<=>server interface. For each physical interface you use (most devices have multiple - the nth interface is referred to as mN below), the following memory regions must be defined:
+
+```json
+<memory_region name="mX_req_free" size="0x200_000" page_size="0x200_000"/>
+<memory_region name="mX_req_used" size="0x200_000" page_size="0x200_000"/>
+<memory_region name="mX_ret_free" size="0x200_000" page_size="0x200_000"/>
+<memory_region name="mX_ret_used" size="0x200_000" page_size="0x200_000"/>
+<memory_region name="mX_bufs"     size="0x200_000" page_size="0x200_000"/>
+```
+
+Additionally, you must map in the i2c memory region for your device. The region for the ODROID-C4 is shown below.
+
+```json
+<memory_region name="i2cm2" size="0x1000" phys_addr="0xFFD1D000"/>
+```
+
+#### Server definition
+
+The server is defined in the system definition with mappings to all driver memory regions and all client regions. The below shows the case for one driver and one client.
+
+```json
+<!-- Main protection domain - i2c server -->
+<protection_domain name="i2c_server" priority="200" pp="true">
+    <program_image path="i2c.elf"/>
+
+    <!-- Server <=> driver buffers -->
+    <map mr="mX_req_free" vaddr="0x4_000_000" perms="rw" setvar_vaddr="req_free"/>
+    <map mr="mX_req_used" vaddr="0x4_200_000" perms="rw" setvar_vaddr="req_used"/>
+    <map mr="mX_ret_free" vaddr="0x4_800_000" perms="rw" setvar_vaddr="ret_free"/>
+    <map mr="mX_ret_used" vaddr="0x4_A00_000" perms="rw" setvar_vaddr="ret_used"/>
+    <map mr="mX_bufs" vaddr="0x5_000_000" perms="rw" setvar_vaddr="driver_bufs"/>
+
+
+    <!-- Client <=> server ring buffer -->
+    <map mr="client_req_free" vaddr="0x5_200_000" perms="rw" setvar_vaddr="client_req_free"/>
+    <map mr="client_req_used" vaddr="0x5_400_000" perms="rw" setvar_vaddr="client_req_used"/>
+    <map mr="client_ret_free" vaddr="0x5_600_000" perms="rw" setvar_vaddr="client_ret_free"/>
+    <map mr="client_ret_used" vaddr="0x5_800_000" perms="rw" setvar_vaddr="client_ret_used"/>
+
+</protection_domain>
+```
+
+#### Driver definition
+
+The driver just requires mapping to the hardware and the server as well as associated interrupts. Below shows the case for the ODROID-C4 interface m2.
+
+```json
+<!-- i2c driver -->
+<protection_domain name="i2c_driver" priority="201">
+    <program_image path="i2c_driver.elf"/>
+
+    <!-- Server <=> driver buffers -->
+    <map mr="m2_req_free" vaddr="0x4_000_000" perms="rw" setvar_vaddr="req_free"/>
+    <map mr="m2_req_used" vaddr="0x4_200_000" perms="rw" setvar_vaddr="req_used"/>
+    <map mr="m2_ret_free" vaddr="0x4_800_000" perms="rw" setvar_vaddr="ret_free"/>
+    <map mr="m2_ret_used" vaddr="0x4_A00_000" perms="rw" setvar_vaddr="ret_used"/>
+    <map mr="driver_bufs" vaddr="0x5_000_000" perms="rw" setvar_vaddr="driver_bufs"/>
+    <map mr="i2cm2"       vaddr="0x3_000_000" perms="rw" setvar_vaddr="i2c" cached="false"/>
+    <map mr="gpio"        vaddr="0x3_100_000" perms="rw" setvar_vaddr="gpio" cached="false"/>
+    <map mr="clk"         vaddr="0x3_200_000" perms="rw" setvar_vaddr="clk" cached="false"/>
+
+    <!-- M2 IRQs -->
+    <!-- Main interrupt -->
+    <irq irq="247" id="2" trigger="edge"/>
+
+    <!-- TO interrupt (timeout?) -->
+    <irq irq="126" id="3" trigger="edge"/>
+</protection_domain>
+```
+
+#### Channels
+
+Several channels are required between the PDs. **Note: clients are indexed by their channel ID in the server. Channel IDs 0-127 are reserved for clients. Channel 128 is reserved for the driver**. Similarly, the driver always expects the server on channel ID 1. See example below:
+
+```json
+<!-- Driver<=>Server notification interface - this should always be the same! -->
+<channel>
+    <end pd="i2c_server" id="1"/>
+    <end pd="i2c_driver" id="128"/>
+</channel>
+
+<!-- Server<=>Client notification interface -->
+<channel>
+    <end pd="i2c_server" id="0"/>
+    <end pd="client1" id="1"/>
+</channel>
+```
+
+The necessary definitions are summarised below:
+| PD     | Destination | ID |
+| :----- | :---------: |---:|
+| Server | Driver      |128 |
+| Driver | Server      |1   |
+| ClientX| Server      | any|
+| Server | ClientX     | X  |
+
+### Makefile
+
+Building this driver requires something to the effect of the following lines always:
+
+```make
+# SERVERFILES: Files implementing the server side of the i2c stack
+SERVERFILES=$(I2C)/i2c.c
+DRIVERFILES=$(I2C)/i2c-driver.c $(I2C)/i2c-odroid-c4.c
+COMMONFILES=$(I2C)/i2c-transport.c $(I2C)/sw_shared_ringbuffer.c $(I2C)/printf.c
+
+$(BUILD_DIR)/i2c.elf: $(addprefix $(BUILD_DIR)/, $(SERVER_OBJS))
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(BUILD_DIR)/i2c_driver.elf: $(addprefix $(BUILD_DIR)/, $(DRIVER_OBJS))
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+```
+
+Client definitions are more complicated however. To avoid requiring the end user to modify the driver code the following C preprocessor variables are expected **per server**:
+
+| Variable       | Type | Purpose |
+| --------       | ---- | ------- |
+REQ_FREE_LIST    | List | Vaddr of req_free region.
+REQ_USED_LIST    | List | Vaddr of req_used region.
+RET_FREE_LIST    | List | Vaddr of ret_free region.
+RET_USED_LIST    | List | Vaddr of ret_used region.
+BUFS_LIST        | List | Vaddr of ring buffer backing memory.
+NUM_CLIENTS      | Int  | Number of clients. All lists above should have this many entries.  
+
+
+Each is a comma-separated list of length `NUM_CLIENTS` except for `NUM_CLIENTS` itself. These variables should be passed into the server's build command with a `-D`. **The lists must be ordered such that the nth entry of the list corresponds to the client with channel ID `n` in the server!**
+
+
 ## Design
 
 This repository presents a multi-driver multi-server structure (split driver) for handling the i2c interfaces on a device, assuming a homogeneous set of i2c interfaces.
