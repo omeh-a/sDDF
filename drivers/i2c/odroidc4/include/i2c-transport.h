@@ -32,6 +32,12 @@
 #define REQ_BUF_DAT_OFFSET 2    // Number of non-payload bytes. Should match however
                                 // many #defines are listed here.
 
+// Client buf construction modes
+#define I2C_MODE_WRITE 0
+#define I2C_MODE_READ 1
+#define I2C_MODE_WRITE_CONT 2
+#define I2C_MODE_READ_CONT 3
+
 // Context struct
 typedef struct {
     uintptr_t req_free;
@@ -41,7 +47,6 @@ typedef struct {
     uintptr_t driver_bufs;
     ring_handle_t reqRing;
     ring_handle_t retRing;
-    int rdy;
 } i2c_ctx_t;
 
 
@@ -74,7 +79,13 @@ void i2cTransportInit(i2c_ctx_t *context, int buffer_init);
  * @param addr: 7-bit I2C address to be used for the transaction
  * @return Pointer to the buffer allocated for this request
 */
-req_buf_ptr_t allocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_t client, uint8_t addr);
+req_buf_ptr_t serverAllocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_t client, uint8_t addr);
+
+/**
+ * Same as `serverAllocReqBuf` but doesn't take a client parameter.
+*/
+req_buf_ptr_t clientAllocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_t addr);
+
 
 /**
  * Release a request buffer to the free pool.
@@ -84,7 +95,7 @@ int releaseReqBuf(i2c_ctx_t *context, req_buf_ptr_t buf);
 /**
  * Allocate a return buffer to get data back to the server from the driver, given a
  * i2c master interface (bus). The buffer is just allocated and does not get moved
- * into the used queue by this function, unlike `allocReqBuf`.
+ * into the used queue by this function, unlike `serverAllocReqBuf`.
  * Address and client are used to demultiplex by the server.
  * 
  * Buffers are allocated from the free pool, but are not put into the used pool.

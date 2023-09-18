@@ -19,7 +19,8 @@ typedef uint8_t i2c_addr_t;         // 7-bit addressing
 
 // Tranposrt layer
 #define I2C_BUF_SZ 512
-#define I2C_BUF_COUNT 511
+#define I2C_BUF_COUNT 512
+#define I2C_RINGBUF_ENTRIES 65  // Equivalent number of 64 bit pointers
 
 // PPC interface for server - used to allocate/drop addresses
 // PPC MR slots

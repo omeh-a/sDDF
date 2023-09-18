@@ -73,7 +73,7 @@ all: $(IMAGE_FILE)
 
 $(BUILD_DIR)/%.d $(BUILD_DIR)/%.o: %.c Makefile
 	mkdir -p `dirname $(BUILD_DIR)/$*.o`
-	$(CC) -c $(CFLAGS) $< -o $(BUILD_DIR)/$*.o -DBUS_NUM=2
+	$(CC) -c $(CFLAGS) $< -o $(BUILD_DIR)/$*.o -DBUS_NUM=2 -DNUM_CLIENTS=1 -DCLIENT_TRANSPORT_VADDRS="0x4200000"
 
 $(BUILD_DIR)/%.o: %.s Makefile
 	$(AS) -g3 -mcpu=$(CPU) $< -o $@

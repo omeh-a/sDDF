@@ -27,15 +27,11 @@ To use this i2c driver in your seL4-mk project, you need to know which clients w
 * `ret_free`
 * `ret_used`
 
-These ring buffers are backed by memory from a buffer region, `bufs`. Every client needs an instance of **all five regions**. These must be defined as follows in your system description for each client:
+These ring buffers are backed by memory from a buffer region, `bufs`. All of the ring buffers and their backing memory are allocated as a single `0x200000` wide page. These must be defined as follows in your system description for each client:
 
 ```json
-<!-- Transfer channels client <=> server -->
-<memory_region name="clientX_req_free" size="0x200_000" page_size="0x200_000"/>
-<memory_region name="clientX_req_used" size="0x200_000" page_size="0x200_000"/>
-<memory_region name="clientX_ret_free" size="0x200_000" page_size="0x200_000"/>
-<memory_region name="clientX_ret_used" size="0x200_000" page_size="0x200_000"/>
-<memory_region name="clientX_bufs" size="0x200_000" page_size="0x200_000"/>
+<!-- Transfer channel client <=> server -->
+<memory_region name="clientX" size="0x200_000" page_size="0x200_000"/>
 ```
 
 #### Driver/server memory regions
@@ -43,11 +39,7 @@ These ring buffers are backed by memory from a buffer region, `bufs`. Every clie
 The driver and server use an identical layer to the client<=>server interface. For each physical interface you use (most devices have multiple - the nth interface is referred to as mN below), the following memory regions must be defined:
 
 ```json
-<memory_region name="mX_req_free" size="0x200_000" page_size="0x200_000"/>
-<memory_region name="mX_req_used" size="0x200_000" page_size="0x200_000"/>
-<memory_region name="mX_ret_free" size="0x200_000" page_size="0x200_000"/>
-<memory_region name="mX_ret_used" size="0x200_000" page_size="0x200_000"/>
-<memory_region name="mX_bufs"     size="0x200_000" page_size="0x200_000"/>
+<memory_region name="mX" size="0x200_000" page_size="0x200_000"/>
 ```
 
 Additionally, you must map in the i2c memory region for your device. The region for the ODROID-C4 is shown below.
@@ -66,18 +58,11 @@ The server is defined in the system definition with mappings to all driver memor
     <program_image path="i2c.elf"/>
 
     <!-- Server <=> driver buffers -->
-    <map mr="mX_req_free" vaddr="0x4_000_000" perms="rw" setvar_vaddr="req_free"/>
-    <map mr="mX_req_used" vaddr="0x4_200_000" perms="rw" setvar_vaddr="req_used"/>
-    <map mr="mX_ret_free" vaddr="0x4_800_000" perms="rw" setvar_vaddr="ret_free"/>
-    <map mr="mX_ret_used" vaddr="0x4_A00_000" perms="rw" setvar_vaddr="ret_used"/>
-    <map mr="mX_bufs" vaddr="0x5_000_000" perms="rw" setvar_vaddr="driver_bufs"/>
+    <map mr="mX_req_free" vaddr="0x4_000_000" perms="rw" setvar_vaddr="driver_transport"/>
 
 
     <!-- Client <=> server ring buffer -->
-    <map mr="client_req_free" vaddr="0x5_200_000" perms="rw" setvar_vaddr="client_req_free"/>
-    <map mr="client_req_used" vaddr="0x5_400_000" perms="rw" setvar_vaddr="client_req_used"/>
-    <map mr="client_ret_free" vaddr="0x5_600_000" perms="rw" setvar_vaddr="client_ret_free"/>
-    <map mr="client_ret_used" vaddr="0x5_800_000" perms="rw" setvar_vaddr="client_ret_used"/>
+    <map mr="clientX" vaddr="0x5_200_000" perms="rw" setvar_vaddr="clientX"/>
 
 </protection_domain>
 ```
@@ -92,11 +77,7 @@ The driver just requires mapping to the hardware and the server as well as assoc
     <program_image path="i2c_driver.elf"/>
 
     <!-- Server <=> driver buffers -->
-    <map mr="m2_req_free" vaddr="0x4_000_000" perms="rw" setvar_vaddr="req_free"/>
-    <map mr="m2_req_used" vaddr="0x4_200_000" perms="rw" setvar_vaddr="req_used"/>
-    <map mr="m2_ret_free" vaddr="0x4_800_000" perms="rw" setvar_vaddr="ret_free"/>
-    <map mr="m2_ret_used" vaddr="0x4_A00_000" perms="rw" setvar_vaddr="ret_used"/>
-    <map mr="driver_bufs" vaddr="0x5_000_000" perms="rw" setvar_vaddr="driver_bufs"/>
+    <map mr="m2" vaddr="0x4_000_000" perms="rw" setvar_vaddr="client_transport"/>
     <map mr="i2cm2"       vaddr="0x3_000_000" perms="rw" setvar_vaddr="i2c" cached="false"/>
     <map mr="gpio"        vaddr="0x3_100_000" perms="rw" setvar_vaddr="gpio" cached="false"/>
     <map mr="clk"         vaddr="0x3_200_000" perms="rw" setvar_vaddr="clk" cached="false"/>
@@ -181,6 +162,8 @@ The servers act as the target for API calls from clients and has two responsibil
 
 The server accepts requests in the form of a chain of 8-bit tokens, prepended with the address the clients wishes to target. **Each transaction chain can only target a single address** - this is adequate for a majority of i2c perpipherals however; very few require multi-address calls in a single transaction. This constraint is to guarantee O(1) rejection of inauthentic requests.
 
+**Note**: you can still perform multi-address transactions by chaining multiple calls with different addresses by omitting the `END` token (using `_cont` functions in client library).
+
 Clients interface with the server via a shared memory region, passing data into and out of ring buffers. The server determines if these requests are authentic before copying data into the server<=>driver transport layer. Client requests are put into a queue to guarantee "first-come-first-serve" operation.
 
 **Each server corresponds to exactly one driver, and the pair represents one logical i2c interface.**
@@ -200,7 +183,7 @@ Once the full transaction has been processed, the server is notified to return d
 
 Upon each invokation of the driver, ring buffers for all interfaces are processed before sleeping to avoid multiplying context switches.
 
-**Important note**: This driver does not implement a polling mode. For extremely long i2c transactions, a polling mode driver (or extending this one to switch) may be preferable.
+**Important note**: This driver does not implement a polling mode. For extremely long i2c transactions at a high speed (1 Mb/s+), a polling mode driver (or extending this one to switch) may be preferable.
 
 ### Security
 
@@ -222,13 +205,15 @@ All i2c transactions begin with a START bit followed by an address + R/W bit sen
 
 A token-based abstraction is already used in the ODROID C4 hardware, but we take it a step further by flattening data into the token stream too, for easier buffering. The tokens are defined as follows:
 
-* `I2C_TK_END` - Terminator for token lists; has no effect besides to indicate further bytes are invalid.
-* `I2C_TK_START` - Triggers hardware to signal the START condition on the bus, claiming it.
-* `I2C_TK_ADDRW` - Transmit a 7 bit address with a WRITE condition.
-* `I2C_TK_ADDRR` - Transmit a 7 bit address with a READ condition.
-* `I2C_TK_DATA_END` - Transmit a NACK to indicate to the target that we are done reading, if a read was in effect. Required to prevent target from staying in read mode.
-* `I2C_TK_STOP` - Triggers hardware to signal the END condition on the bus, releasing it.
-* `I2C_TK_DAT` - Transmits or receives a byte of data - the next byte after this token is treated as the payload to send under a WRITE condition, otherwise under a READ condition the subsequent byte should be another token which is processed normally.
+| Token             | Description                                |
+| -------------     | -------------------------------------------|
+| `I2C_TK_END`      | Terminator for token lists; has no effect besides to indicate further bytes are invalid.
+| `I2C_TK_START`    | Triggers hardware to signal the START condition on the bus, claiming it.
+| `I2C_TK_ADDRW`    | Transmit a 7 bit address with a WRITE condition.
+| `I2C_TK_ADDRR`    | Transmit a 7 bit address with a READ condition.
+| `I2C_TK_DATA_END` | Transmit a NACK to indicate to the target that we are done reading, if a read was in effect. Required to prevent target from staying in read mode.
+| `I2C_TK_STOP`     | Triggers hardware to signal the END condition on the bus, releasing it.
+| `I2C_TK_DAT`      | Transmits or receives a byte of data - the next byte after this token is treated as the payload to send under a WRITE condition, otherwise under a READ condition the subsequent byte should be another token which is processed normally.
 
 ### Error handling and transaction buffer format
 
@@ -253,11 +238,11 @@ ERR is zero for no error, otherwise it is an error code depending on the particu
 The request buffers are used between the clients, server and drivers to represent a complete request. They are passed from the client to the server where they are validated and moved to the driver if authentic. The driver then decomposes the request buffer into some number of hardware operations. The first three bytes are used for the PD, i2c address and i2c bus for multiplexing.
 
 ```
-| 0x0 | 0x1 | 0x2 | 0x3 | ... | 0xN |
-| PD  | ADR | BUS | DAT | DAT | DAT |
+| 0x0 | 0x1 | 0x2 | ... | 0xN |
+| PD  | ADR | DAT | DAT | DAT |
 ```
 
-Note: the `BUS` field is only requred between the client and the server. We leave it as is in the other stages for the sake of simplicity.
+**Note**: the `PD` field is not filled in by the client as it doesn't know its own channel identifier in the server. The server populates this field upon approving the request and copying it from the client<=>server transport to the server<=>driver transport.
 
 ## ODROID C4 i2c specifications
 

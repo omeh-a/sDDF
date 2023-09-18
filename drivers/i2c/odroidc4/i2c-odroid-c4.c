@@ -38,10 +38,7 @@ uintptr_t gpio;
 uintptr_t clk;
 
 // Transport layer
-uintptr_t req_free;
-uintptr_t req_used;
-uintptr_t ret_free;
-uintptr_t ret_used;
+uintptr_t transport;
 uintptr_t driver_bufs;
 
 ring_handle_t reqRing;
@@ -131,14 +128,21 @@ static inline void setupi2c() {
     // Initialise transport
     // NOTE: this cannot be done statically because the shared memory regions need
     //       to be ELF patched in after compile time.
-    i2c_ctx.req_free = req_free;
-    i2c_ctx.req_used = req_used;
-    i2c_ctx.ret_free = ret_free;
-    i2c_ctx.ret_used = ret_used;
-    i2c_ctx.driver_bufs = driver_bufs;
+
+    // Ring buffers: 512 64-bit pointers + 2 uint32_ts = 0x1008
+    //               round up to 0x100A -> increment pointer by 515
+    // Backing buffers: 512*512 = 0x100000, but we just give it the entire
+    //                  rest of the transport page.
+    
+    i2c_ctx.req_free = transport;
+    i2c_ctx.req_used = (transport + I2C_RINGBUF_ENTRIES);
+    i2c_ctx.ret_free = (transport + I2C_RINGBUF_ENTRIES*2);
+    i2c_ctx.ret_used = (transport + I2C_RINGBUF_ENTRIES*3);
+    i2c_ctx.driver_bufs = (transport + I2C_RINGBUF_ENTRIES*4);
     i2c_ctx.reqRing = reqRing;
     i2c_ctx.retRing = retRing;
     i2cTransportInit(&i2c_ctx, 0);
+
 
     // Note: this is hacky - should do this using a GPIO driver.    
     // Set up pinmux

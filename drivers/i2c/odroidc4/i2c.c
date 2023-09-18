@@ -18,6 +18,8 @@
 #include "i2c-transport.h"
 #include "i2c.h"
 
+#define NUM_CLIENTS 1       // REMOVE
+
 #ifndef BUS_NUM
 #error "BUS_NUM must be defined!"
 #endif
@@ -27,22 +29,15 @@
 #if NUM_CLIENTS > I2C_SECURITY_LIST_SZ
 #error "NUM_CLIENTS must be less than or equal to I2C_SECURITY_LIST_SZ!"
 #endif
-#ifndef CLIENT_MAP_REQFREES
-#error "CLIENT_MAP_REQFREES must be defined!"
+#ifndef CLIENT_TRANSPORT_VADDRS
+#error "CLIENT_TRANSPORT_VADDRS must be defined!"
 #endif
-#ifndef CLIENT_MAP_REQUSEDS
-#error "CLIENT_MAP_REQUSEDS must be defined!"
-#endif
-#ifndef CLIENT_MAP_RETFREES
-#error "CLIENT_MAP_RETFREES must be defined!"
-#endif
-#ifndef CLIENT_MAP_RETUSEDS
-#error "CLIENT_MAP_RETUSEDS must be defined!"
-#endif
+
 
 
 // Client table: maps client IDs to their corresponding transport context
 uint64_t clients[I2C_SECURITY_LIST_SZ];
+
 
 // Security list: owner of each i2c address on the bus
 i2c_security_list_t security_list[I2C_SECURITY_LIST_SZ];
@@ -51,28 +46,31 @@ i2c_security_list_t security_list[I2C_SECURITY_LIST_SZ];
 // This rat's nest of horrifying macros is used to guarantee that users do not need
 // to touch the driver code to use i2c. Sorry makefile. Memory addresses of all shared
 // regions need to be passed in by the makefile matching the system definition.
-#define EXPAND_AS_INIT_LIST(req_free, req_used, ret_free, ret_used, driver_bufs) \
-    {req_free, req_used, ret_free, ret_used, driver_bufs, {0}, {0}, 0},
+#define EXPAND_AS_INIT_LIST(base_vaddr) \
+    { \
+        base_vaddr, \
+        base_vaddr + I2C_RINGBUF_ENTRIES, \
+        base_vaddr + I2C_RINGBUF_ENTRIES * 2, \
+        base_vaddr + I2C_RINGBUF_ENTRIES * 3, \
+        base_vaddr + I2C_RINGBUF_ENTRIES * 4, \
+        0, 0, 0 \
+    },
 
-#define MAKE_ENTRY(r1, r2, r3, r4, db) EXPAND_AS_INIT_LIST(r1, r2, r3, r4, db)
+#define MAKE_ENTRY(base_vaddr) EXPAND_AS_INIT_LIST(base_vaddr)
 
-#define PROCESS_LISTS(R1, R2, R3, R4, DB) MAKE_ENTRY(R1, R2, R3, R4, DB)
+#define PROCESS_LISTS(CLIENT_TRANSPORT_VADDRS) MAKE_ENTRY(CLIENT_TRANSPORT_VADDRS)
 
 #define INIT_STRUCT_ARRAY \
 { \
-    PROCESS_LISTS(REQ_FREE_LIST, REQ_USED_LIST, RET_FREE_LIST, RET_USED_LIST, DRIVER_BUFS_LIST) \
+    PROCESS_LISTS(CLIENT_TRANSPORT_VADDRS) \
 }
 
-i2c_ctx_t client_contexts[] = INIT_STRUCT_ARRAY;
+i2c_ctx_t i2c_contexts[] = INIT_STRUCT_ARRAY;
 
 // Driver transport layer. This is entirely static and these values are just supplied
 // from the system definition.
 i2c_ctx_t driver_context;
-uintptr_t drv_req_free;
-uintptr_t drv_req_used;
-uintptr_t drv_ret_free;
-uintptr_t drv_ret_used;
-uintptr_t drv_driver_bufs;
+uintptr_t drv_transport;
 
 /**
  * Main entrypoint for server.
@@ -81,11 +79,19 @@ void init(void) {
     sel4cp_dbg_puts("I2C server init\n");
 
     // Set up server<=>driver transport layer
-    driver_context.req_free = drv_req_free;
-    driver_context.req_used = drv_req_used;
-    driver_context.ret_free = drv_ret_free;
-    driver_context.ret_used = drv_ret_used;
-    driver_context.driver_bufs = drv_driver_bufs;
+    // NOTE: this cannot be done statically because the shared memory regions need
+    //       to be ELF patched in after compile time.
+
+    // Ring buffers: 512 64-bit pointers + 2 uint32_ts = 0x1008
+    //               round up to 0x100A -> increment pointer by 515
+    // Backing buffers: 512*512 = 0x100000, but we just give it the entire
+    //                  rest of the transport page.
+    
+    driver_context.req_free = (drv_transport);
+    driver_context.req_used = (drv_transport + I2C_RINGBUF_ENTRIES);
+    driver_context.ret_free = (drv_transport + I2C_RINGBUF_ENTRIES*2);
+    driver_context.ret_used = (drv_transport + I2C_RINGBUF_ENTRIES*3);
+    driver_context.driver_bufs = (drv_transport + I2C_RINGBUF_ENTRIES*4);
     i2cTransportInit(&driver_context, 1);
 
     // Set up client<=>server transport layers
@@ -138,7 +144,7 @@ static inline void driverNotify(void) {
         // TODO: logic here to return
     }
 
-    releaseRetBuf(ret);
+    // releaseRetBuf(ret);
     
 }
 

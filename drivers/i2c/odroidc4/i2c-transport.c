@@ -27,7 +27,7 @@ void i2cTransportInit(i2c_ctx_t *context, int buffer_init) {
     }
 }
 
-req_buf_ptr_t allocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_t client, uint8_t addr) {
+req_buf_ptr_t serverAllocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_t client, uint8_t addr) {
     if (size > I2C_BUF_SZ - REQ_BUF_DAT_OFFSET*sizeof(i2c_token_t)) {
         printf("transport: Requested buffer size %zu too large\n", size);
         return 0;
@@ -53,6 +53,10 @@ req_buf_ptr_t allocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_
     }
     
     return (req_buf_ptr_t)buf;
+}
+
+req_buf_ptr_t clientAllocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_t addr, uint8_t mode) {
+
 }
 
 ret_buf_ptr_t getRetBuf(i2c_ctx_t *context) {
