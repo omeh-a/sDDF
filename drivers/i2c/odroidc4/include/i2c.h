@@ -14,7 +14,7 @@
 #include "sw_shared_ringbuffer.h"
 typedef uint8_t i2c_addr_t;         // 7-bit addressing
 
-#define DRIVER_NOTIFY_ID    1  // Matching i2c.system
+#define DRIVER_NOTIFY_ID    128 // Matching i2c.system
 
 
 // Tranposrt layer

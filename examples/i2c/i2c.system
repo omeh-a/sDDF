@@ -63,7 +63,7 @@
 
     <!-- Driver<=>Server notification interface -->
     <channel>
-        <end pd="i2c_server" id="1"/>
+        <end pd="i2c_server" id="128"/>
         <end pd="i2c_driver" id="1"/>
     </channel>
 

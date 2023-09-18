@@ -35,36 +35,12 @@
 
 
 
-// Client table: maps client IDs to their corresponding transport context
-uint64_t clients[I2C_SECURITY_LIST_SZ];
 
 
 // Security list: owner of each i2c address on the bus
 i2c_security_list_t security_list[I2C_SECURITY_LIST_SZ];
 
 // ## Transport layer context ##
-// This rat's nest of horrifying macros is used to guarantee that users do not need
-// to touch the driver code to use i2c. Sorry makefile. Memory addresses of all shared
-// regions need to be passed in by the makefile matching the system definition.
-#define EXPAND_AS_INIT_LIST(base_vaddr) \
-    { \
-        base_vaddr, \
-        base_vaddr + I2C_RINGBUF_ENTRIES, \
-        base_vaddr + I2C_RINGBUF_ENTRIES * 2, \
-        base_vaddr + I2C_RINGBUF_ENTRIES * 3, \
-        base_vaddr + I2C_RINGBUF_ENTRIES * 4, \
-        0, 0, 0 \
-    },
-
-#define MAKE_ENTRY(base_vaddr) EXPAND_AS_INIT_LIST(base_vaddr)
-
-#define PROCESS_LISTS(CLIENT_TRANSPORT_VADDRS) MAKE_ENTRY(CLIENT_TRANSPORT_VADDRS)
-
-#define INIT_STRUCT_ARRAY \
-{ \
-    PROCESS_LISTS(CLIENT_TRANSPORT_VADDRS) \
-}
-
 i2c_ctx_t i2c_contexts[] = INIT_STRUCT_ARRAY;
 
 // Driver transport layer. This is entirely static and these values are just supplied
@@ -106,8 +82,6 @@ void init(void) {
     for (int j = 0; j < I2C_SECURITY_LIST_SZ; j++) {
         security_list[j] = -1;
     }
-
-    // Initialisation procedure: 
 }
 
 /**
@@ -149,8 +123,45 @@ static inline void driverNotify(void) {
 }
 
 
+// Called when a client notifies the server to indicate data available
+// We just use the channel ID as the client ID, as it is assumed that clients
+// will be mapped to channels in a 1:1 fashion.
 static inline void clientNotify(int channel) {
-    // 
+    printf("server: Notified by client %i!\n", channel);
+    if (channel > NUM_CLIENTS) {
+        sel4cp_dbg_puts("I2C|ERROR: Invalid client channel!\n");
+        return;
+    }
+
+    i2c_ctx_t *context = &i2c_contexts[channel];
+
+    // Read the request buffer
+    if (reqBufEmpty(context)) {
+        return;
+    }
+    size_t sz;
+    req_buf_ptr_t req = popReqBuf(context, &sz);
+    if (req == 0) {
+        return;
+    }
+    uint8_t addr = req[REQ_BUF_ADDR];
+
+    // Check that the address is claimed by the client
+    if (security_list[addr] != channel) {
+        sel4cp_dbg_puts("I2C|ERROR: Address not claimed by client!\n");
+        // Dismiss the request
+        releaseReqBuf(context, req);
+        return;
+    }
+
+    // Copy data into request buffer
+    req_buf_ptr_t ret = serverAllocReqBuf(&driver_context, sz, (uint8_t *)req, channel, addr);
+    if (ret == 0) {
+        sel4cp_dbg_puts("I2C|ERROR: Failed to allocate request buffer!\n");
+        // Dismiss the request
+        releaseReqBuf(context, req);
+        return;
+    }
 }
 
 
@@ -159,9 +170,15 @@ void notified(sel4cp_channel c) {
         case DRIVER_NOTIFY_ID:
             driverNotify();
             break;
-        case 2:
+        default:
+            clientNotify(c);
             break;
     }
+    // Check if there are any requests in the queue
+    if (reqBufEmpty(&driver_context)) {
+        return;
+    }
+
 }
 
 static inline seL4_MessageInfo_t ppcError(void) {
