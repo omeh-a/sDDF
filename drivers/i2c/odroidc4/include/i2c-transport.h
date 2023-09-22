@@ -124,7 +124,7 @@ int releaseRetBuf(i2c_ctx_t *context, ret_buf_ptr_t buf);
  * @param sz: Size of the buffer to be pushed back to the server
  * @return 0 on success
 */
-int pushRetBuf(i2c_ctx_t *context, ret_buf_ptr_t buf, size_t size);
+int pushRetBuf(i2c_ctx_t *context, ret_buf_ptr_t buf);
 
 /**
  * Pop a return buffer from the server for a specified i2c master interface (bus).

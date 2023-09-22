@@ -91,11 +91,11 @@ void init(void) {
 static inline void driverNotify(void) {
     printf("server: Notified by driver!\n");
     // Read the return buffer
-        if (retBufEmpty()) {
+    if (retBufEmpty(&driver_context)) {
         return;
     }
     size_t sz;
-    ret_buf_ptr_t ret = popRetBuf(&sz);
+    ret_buf_ptr_t ret = popRetBuf(&driver_context, &sz);
     if (ret == 0) {
         return;
     }
@@ -110,16 +110,28 @@ static inline void driverNotify(void) {
     uint8_t client = ret[RET_BUF_CLIENT];
     uint8_t addr = ret[RET_BUF_ADDR];
 
+    // Sanity check
+    if (client >= 128) {
+        sel4_dbg_puts("I2C|ERROR: Driver attempting to return to invalid client!\n");
+        releaseRetBuf(&driver_context, ret);
+        return;
+    }
+
     if (err) {
         printf("server: Error %i on bus %i for client %i at token of type %i\n", err, BUS_NUM, client, addr);
     } else {
         printf("server: Success on bus %i for client %i at address %i\n", BUS_NUM, client, addr);
 
-        // TODO: logic here to return
-    }
+        // Move data from driver ret buf to client ret buf
+        ret_buf_ptr_t ret = getRetBuf(i2c_contexts[client]);
 
-    // releaseRetBuf(ret);
-    
+        // Copy to client buffer
+        memcpy((uint8_t *)ret, (uint8_t *)ret, sz);
+
+        // Notify client
+        sel4cp_notify(client);
+    }
+    releaseRetBuf(&driver_context, ret);
 }
 
 
@@ -176,7 +188,10 @@ void notified(sel4cp_channel c) {
     }
     // Check if there are any requests in the queue
     if (reqBufEmpty(&driver_context)) {
-        return;
+        return; // Nothing to do
+    } else {
+        // Ping the driver
+        sel4cp_nofify(DRIVER_NOTIFY_ID);
     }
 
 }
