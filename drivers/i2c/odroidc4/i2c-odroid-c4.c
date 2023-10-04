@@ -471,7 +471,7 @@ static inline int i2cLoadTokens() {
 
 void init(void) {
     setupi2c();
-    i2cTransportInit(0);
+    i2cTransportInit(&i2c_ctx, 0);
     // Set up driver state
     i2c_ifState.current_req = NULL;
     i2c_ifState.current_ret = NULL;
@@ -486,7 +486,7 @@ void init(void) {
  * Check if there is work to do for a given bus and dispatch it if so.
 */
 static inline void checkBuf() {
-    if (!reqBufEmpty()) {
+    if (!reqBufEmpty(&i2c_ctx)) {
         // If this interface is busy, skip notification and
         // set notified flag for later processing
         if (i2c_ifState.current_req) {
@@ -582,7 +582,7 @@ static inline void i2cirq(int timeout) {
             pushRetBuf(i2c_ifState.current_ret, i2c_ifState.current_req_len);
         }
         if (i2c_ifState.current_req) {
-            releaseReqBuf(i2c_ifState.current_req);
+            releaseReqBuf(&i2c_ctx, i2c_ifState.current_req);
         }
         i2c_ifState.current_ret = NULL;
         i2c_ifState.current_req = 0x0;
@@ -635,7 +635,7 @@ static inline void i2cirq(int timeout) {
     // If request is completed or there was an error, return data to server and notify.
     if (err < 0 || !i2c_ifState.remaining) {
         printf("driver: request completed or error, returning to server\n");
-        pushRetBuf(&i2c_ctx, i2c_ifState.current_ret, i2c_ifState.current_req_len);
+        pushRetBuf(&i2c_ctx, i2c_ifState.current_ret);
         releaseReqBuf(&i2c_ctx, i2c_ifState.current_req);
         i2c_ifState.current_ret = NULL;
         i2c_ifState.current_req = 0x0;

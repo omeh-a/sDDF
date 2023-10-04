@@ -17,6 +17,7 @@ typedef uint8_t i2c_addr_t;         // 7-bit addressing
 #define DRIVER_NOTIFY_ID    128 // Matching i2c.system
 
 
+
 // Tranposrt layer
 #define I2C_BUF_SZ 512
 #define I2C_BUF_COUNT 512

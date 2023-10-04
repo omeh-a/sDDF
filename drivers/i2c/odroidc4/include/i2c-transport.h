@@ -84,7 +84,7 @@ req_buf_ptr_t serverAllocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, 
 /**
  * Same as `serverAllocReqBuf` but doesn't take a client parameter.
 */
-req_buf_ptr_t clientAllocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_t addr);
+req_buf_ptr_t clientAllocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, uint8_t addr, uint8_t mode);
 
 
 /**
@@ -141,8 +141,8 @@ req_buf_ptr_t popReqBuf(i2c_ctx_t *context, size_t *size);
 */
 ret_buf_ptr_t popRetBuf(i2c_ctx_t *context, size_t *size);
 
-int retBufEmpty(void);
-int reqBufEmpty(void);
+int retBufEmpty(i2c_ctx_t *context);
+int reqBufEmpty(i2c_ctx_t *context);
 
 
 // Errors

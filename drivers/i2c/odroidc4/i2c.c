@@ -33,15 +33,15 @@
 #error "CLIENT_TRANSPORT_VADDRS must be defined!"
 #endif
 
-
-
-
+void _putchar(char character) {
+    sel4cp_debug_puts(character);
+}
 
 // Security list: owner of each i2c address on the bus
 i2c_security_list_t security_list[I2C_SECURITY_LIST_SZ];
 
 // ## Transport layer context ##
-i2c_ctx_t i2c_contexts[] = INIT_STRUCT_ARRAY;
+i2c_ctx_t i2c_contexts[NUM_CLIENTS];
 
 // Driver transport layer. This is entirely static and these values are just supplied
 // from the system definition.
@@ -71,9 +71,17 @@ void init(void) {
     i2cTransportInit(&driver_context, 1);
 
     // Set up client<=>server transport layers
-    INIT_STRUCT_ARRAY();
+
+    // TEMPORARY: set up one client hardcoded
+    i2c_contexts[0].req_free = (CLIENT_TRANSPORT_VADDRS);
+    i2c_contexts[0].req_used = (CLIENT_TRANSPORT_VADDRS + I2C_RINGBUF_ENTRIES);
+    i2c_contexts[0].ret_free = (CLIENT_TRANSPORT_VADDRS + I2C_RINGBUF_ENTRIES*2);
+    i2c_contexts[0].ret_used = (CLIENT_TRANSPORT_VADDRS + I2C_RINGBUF_ENTRIES*3);
+    
     for (int i = 0; i < NUM_CLIENTS; i++) {
-        i2cTransportInit(&client_contexts[i], 1);
+        // TODO: patch in vaddrs here. Needs a metaprogramming interface that
+        //       currently does not exist in the sDDF.
+        i2cTransportInit(&i2c_contexts[i], 1);
     }
 
     i2cTransportInit(&driver_context, 1);
@@ -112,7 +120,7 @@ static inline void driverNotify(void) {
 
     // Sanity check
     if (client >= 128) {
-        sel4_dbg_puts("I2C|ERROR: Driver attempting to return to invalid client!\n");
+        sel4cp_dbg_puts("I2C|ERROR: Driver attempting to return to invalid client!\n");
         releaseRetBuf(&driver_context, ret);
         return;
     }
@@ -123,7 +131,7 @@ static inline void driverNotify(void) {
         printf("server: Success on bus %i for client %i at address %i\n", BUS_NUM, client, addr);
 
         // Move data from driver ret buf to client ret buf
-        ret_buf_ptr_t ret = getRetBuf(i2c_contexts[client]);
+        ret_buf_ptr_t ret = getRetBuf(&i2c_contexts[client]);
 
         // Copy to client buffer
         memcpy((uint8_t *)ret, (uint8_t *)ret, sz);

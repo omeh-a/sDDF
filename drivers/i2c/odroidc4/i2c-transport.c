@@ -84,9 +84,9 @@ req_buf_ptr_t clientAllocReqBuf(i2c_ctx_t *context, size_t size, uint8_t *data, 
         }
     }
 
-    uintptr_t buf;
+    uint8_t *buf;
     unsigned int sz;
-    int ret = dequeue_free(&context->reqRing, &buf, &sz);
+    int ret = dequeue_free(&context->reqRing, ((uintptr_t)&buf), &sz);
     if (ret != 0)
     {
         return 0;
@@ -158,10 +158,6 @@ ret_buf_ptr_t getRetBuf(i2c_ctx_t *context)
 
 int pushRetBuf(i2c_ctx_t *context, ret_buf_ptr_t buf)
 {
-    if (size > I2C_BUF_SZ || !buf)
-    {
-        return 0;
-    }
     return enqueue_used(&context->retRing, (uintptr_t)buf, I2C_BUF_SZ);
 }
 
