@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- System definition for PCIe lib -->
+<!-- Matt Rossouw - matthew.rossouw@unsw.edu.au -->
+<!-- 2023 -->
+<system>
+    <!-- pcie hardware -->
+    <memory_region name="nic" size="0x1000" phys_addr="0x404a800000"/>
+
+    <!-- Main protection domain - pcie server -->
+    <protection_domain name="pcie_server" priority="200" pp="true">
+        <program_image path="x550t-pcie.elf"/>
+
+        <!-- Server <=> driver buffers -->
+		<map mr="nic" vaddr="0x4_000_000" perms="rw" setvar_vaddr="pcie"/>
+    </protection_domain>
+
+</system>

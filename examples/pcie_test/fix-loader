@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+
+set -eu
+
+# Parse the command line.
+if [ $# -lt 1 ]; then
+    echo "Usage: $(basename "$0") <image> [qemu args]" >&2
+    exit 1
+fi
+image="$1"
+shift
+
+# Create a temporary directory.
+TMPDIR="grub"
+# We'll keep the trap command to clean up other temporary files, but will manually move the ISO.
+trap "rm -rf -- '$TMPDIR'" EXIT
+
+# A subdirectory for the ISO files.
+ISODIR="$TMPDIR"/iso
+mkdir -p "$ISODIR"
+
+# Copy the sel4cp image.
+cp "$image" "$ISODIR"/image
+
+# Create the grub configuration file.
+mkdir -p "$ISODIR"/boot/grub
+cat > "$ISODIR"/boot/grub/grub.cfg <<-EOF
+set default=0
+set timeout=0
+
+serial --unit=0 --speed=115200
+terminal_input serial
+terminal_output serial
+
+menuentry 'seL4cp' {
+  multiboot2 /image
+}
+EOF
+
+# Build a bootable grub ISO image.
+grub-mkrescue -o "$TMPDIR"/grub.iso "$ISODIR"
+
+# Move the ISO file to the current directory.
+mv "$TMPDIR"/grub.iso ./grub.iso

@@ -3,4 +3,5 @@ build/
 *.elf
 *.depend
 .DS_Store
-
+examples/i2c/build.sh
+.vscode
