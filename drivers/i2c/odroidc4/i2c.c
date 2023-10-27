@@ -20,33 +20,34 @@
 
 #define NUM_CLIENTS 1       // REMOVE
 
-#ifndef BUS_NUM
-#error "BUS_NUM must be defined!"
-#endif
-#ifndef NUM_CLIENTS
-#error "NUM_CLIENTS must be defined!"
-#endif
-#if NUM_CLIENTS > I2C_SECURITY_LIST_SZ
-#error "NUM_CLIENTS must be less than or equal to I2C_SECURITY_LIST_SZ!"
-#endif
-#ifndef CLIENT_TRANSPORT_VADDRS
-#error "CLIENT_TRANSPORT_VADDRS must be defined!"
-#endif
+// #ifndef BUS_NUM
+// #error "BUS_NUM must be defined!"
+// #endif
+// #ifndef NUM_CLIENTS
+// #error "NUM_CLIENTS must be defined!"
+// #endif
+// #if NUM_CLIENTS > I2C_SECURITY_LIST_SZ
+// #error "NUM_CLIENTS must be less than or equal to I2C_SECURITY_LIST_SZ!"
+// #endif
+// #ifndef CLIENT_TRANSPORT_VADDRS
+// #error "CLIENT_TRANSPORT_VADDRS must be defined!"
+// #endif
 
-void _putchar(char character) {
-    sel4cp_debug_puts(character);
-}
 
 // Security list: owner of each i2c address on the bus
 i2c_security_list_t security_list[I2C_SECURITY_LIST_SZ];
 
 // ## Transport layer context ##
 i2c_ctx_t i2c_contexts[NUM_CLIENTS];
+// Client transport layer
+uintptr_t client_transport;     // Metaprogramming to automate this will be ugly
+
 
 // Driver transport layer. This is entirely static and these values are just supplied
 // from the system definition.
 i2c_ctx_t driver_context;
-uintptr_t drv_transport;
+uintptr_t driver_transport;
+
 
 /**
  * Main entrypoint for server.
@@ -63,11 +64,11 @@ void init(void) {
     // Backing buffers: 512*512 = 0x100000, but we just give it the entire
     //                  rest of the transport page.
     
-    driver_context.req_free = (drv_transport);
-    driver_context.req_used = (drv_transport + I2C_RINGBUF_ENTRIES);
-    driver_context.ret_free = (drv_transport + I2C_RINGBUF_ENTRIES*2);
-    driver_context.ret_used = (drv_transport + I2C_RINGBUF_ENTRIES*3);
-    driver_context.driver_bufs = (drv_transport + I2C_RINGBUF_ENTRIES*4);
+    driver_context.req_free = (driver_transport);
+    driver_context.req_used = (driver_transport + I2C_RINGBUF_ENTRIES);
+    driver_context.ret_free = (driver_transport + I2C_RINGBUF_ENTRIES*2);
+    driver_context.ret_used = (driver_transport + I2C_RINGBUF_ENTRIES*3);
+    driver_context.driver_bufs = (driver_transport + I2C_RINGBUF_ENTRIES*4);
     i2cTransportInit(&driver_context, 1);
 
     // Set up client<=>server transport layers
@@ -199,7 +200,7 @@ void notified(sel4cp_channel c) {
         return; // Nothing to do
     } else {
         // Ping the driver
-        sel4cp_nofify(DRIVER_NOTIFY_ID);
+        sel4cp_notify(DRIVER_NOTIFY_ID);
     }
 
 }

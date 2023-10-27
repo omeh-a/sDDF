@@ -49,11 +49,11 @@ void i2c_init(uintptr_t shared_mem, uint64_t server_channel, int bus) {
     servers[bus].server_id = server_channel;
 
     // Populate context struct
-    context.req_free = (drv_transport);
-    context.req_used = (drv_transport + I2C_RINGBUF_ENTRIES);
-    context.ret_free = (drv_transport + I2C_RINGBUF_ENTRIES*2);
-    context.ret_used = (drv_transport + I2C_RINGBUF_ENTRIES*3);
-    context.driver_bufs = (drv_transport + I2C_RINGBUF_ENTRIES*4);
+    context.req_free = (driver_transport);
+    context.req_used = (driver_transport + I2C_RINGBUF_ENTRIES);
+    context.ret_free = (driver_transport + I2C_RINGBUF_ENTRIES*2);
+    context.ret_used = (driver_transport + I2C_RINGBUF_ENTRIES*3);
+    context.driver_bufs = (driver_transport + I2C_RINGBUF_ENTRIES*4);
 
     // Initialise shared memory
     i2cTransportInit(&(servers[bus].context), 0);

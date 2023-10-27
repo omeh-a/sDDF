@@ -44,6 +44,10 @@
 #endif
 
 
+void _putchar(char character) {
+    sel4cp_dbg_puts(character);
+}
+
 // 'ntoa' conversion buffer size, this must be big enough to hold one converted
 // numeric number including padded zeros (dynamically created on stack)
 // default: 32 byte

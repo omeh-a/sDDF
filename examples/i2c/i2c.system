@@ -26,7 +26,7 @@
 		<map mr="m2" vaddr="0x4_000_000" perms="rw" setvar_vaddr="driver_transport"/>
 
         <!-- Client <=> server ring buffer -->
-
+        <map mr="client1" vaddr="0x4_200_000" perms="rw" setvar_vaddr="client_transport"/>
    
     </protection_domain>
 
@@ -36,7 +36,6 @@
 
         <!-- Server <=> driver buffers -->
 		<map mr="m2"    vaddr="0x4_000_000" perms="rw" setvar_vaddr="transport"/>
-        <map mr="client1" vaddr="0x4_200_000" perms="rw" setvar_vaddr="client_transport"/>
 
         <map mr="i2cm2" vaddr="0x3_000_000" perms="rw" setvar_vaddr="i2c" cached="false"/>
         <map mr="gpio"  vaddr="0x3_100_000" perms="rw" setvar_vaddr="gpio" cached="false"/>
@@ -63,13 +62,13 @@
 
     <!-- Driver<=>Server notification interface -->
     <channel>
-        <end pd="i2c_server" id="128"/>
+        <end pd="i2c_server" id="63"/>
         <end pd="i2c_driver" id="1"/>
     </channel>
 
     <!-- Server<=>Client notification interface -->
-    <channel>
+    <!-- <channel>
         <end pd="i2c_server" id="2"/>
         <end pd="fool" id="2"/>
-    </channel>
+    </channel> -->
 </system>
